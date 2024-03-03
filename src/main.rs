@@ -4,6 +4,16 @@ use notan::prelude::*;
 
 const INITIAL_ENTITIES: usize = 30;
 const INITIAL_VELOCITY: f32 = 50.0;
+const GAME_WIDTH: f32 = 800.0;
+const GAME_HEIGHT: f32 = 600.0;
+
+#[derive(Copy, Clone, Debug, Hash)]
+struct Collision([usize; 2]);
+impl PartialEq for Collision {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.contains(&other.0[0]) && self.0.contains(&other.0[1])
+    }
+}
 
 struct Body {
     position: Vec2,
@@ -30,7 +40,9 @@ struct State {
 
 #[notan_main]
 fn main() -> Result<(), String> {
-    let win = WindowConfig::default().set_vsync(true);
+    let win = WindowConfig::default()
+        .set_size(GAME_WIDTH as _, GAME_HEIGHT as _)
+        .set_vsync(true);
 
     notan::init_with(setup)
         .add_config(win)
@@ -98,13 +110,18 @@ fn init_entities() -> Vec<Entity> {
     let mut rng = Random::default();
     (0..INITIAL_ENTITIES)
         .map(|_| {
+            let min_pos = vec2(50.0, 50.0);
+            let max_pos = vec2(GAME_WIDTH - min_pos.x * 2.0, GAME_HEIGHT - min_pos.y * 2.0);
             let position = vec2(
-                50.0 + rng.gen::<f32>() * 700.0,
-                50.0 + rng.gen::<f32>() * 500.0,
+                min_pos.x + rng.gen::<f32>() * max_pos.x,
+                min_pos.y + rng.gen::<f32>() * max_pos.y,
             );
-            let min = INITIAL_VELOCITY * -0.5;
-            let max = INITIAL_VELOCITY;
-            let velocity = vec2(min + rng.gen::<f32>() * max, min + rng.gen::<f32>() * max);
+            let min_vel = INITIAL_VELOCITY * -0.5;
+            let max_vel = INITIAL_VELOCITY;
+            let velocity = vec2(
+                min_vel + rng.gen::<f32>() * max_vel,
+                min_vel + rng.gen::<f32>() * max_vel,
+            );
             Entity {
                 body: Body {
                     position,
@@ -132,9 +149,9 @@ fn sys_clean_collisions(entities: &mut [Entity]) {
     entities.iter_mut().for_each(|e| e.is_colliding = false);
 }
 
-fn sys_check_collision(entities: &mut [Entity]) -> Vec<(usize, usize)> {
+fn sys_check_collision(entities: &mut [Entity]) -> Vec<Collision> {
     // TODO do not nest loops, use spatial hashing
-    let mut colliding = vec![];
+    let mut colliding = vec![]; // todo maybe use a hashset?
     entities.iter().enumerate().for_each(|(id1, e1)| {
         entities.iter().enumerate().for_each(|(id2, e2)| {
             if id1 == id2 {
@@ -147,12 +164,15 @@ fn sys_check_collision(entities: &mut [Entity]) -> Vec<(usize, usize)> {
                 e2.body.position,
                 e2.body.radius,
             ) {
-                colliding.push((id1, id2));
+                let collision = Collision([id1, id2]);
+                if !colliding.contains(&collision) {
+                    colliding.push(collision);
+                }
             }
         });
     });
 
-    colliding.iter().for_each(|(id1, id2)| {
+    colliding.iter().for_each(|Collision([id1, id2])| {
         entities[*id1].is_colliding = true;
         entities[*id2].is_colliding = true;
     });
@@ -160,8 +180,8 @@ fn sys_check_collision(entities: &mut [Entity]) -> Vec<(usize, usize)> {
     colliding
 }
 
-fn sys_resolve_collisions(entities: &mut [Entity], collisions: Vec<(usize, usize)>) {
-    collisions.into_iter().for_each(|(id1, id2)| {
+fn sys_resolve_collisions(entities: &mut [Entity], collisions: Vec<Collision>) {
+    collisions.into_iter().for_each(|Collision([id1, id2])| {
         let b1 = &entities[id1].body;
         let b2 = &entities[id2].body;
         let diff_pos = b2.position - b1.position;
@@ -181,15 +201,24 @@ fn sys_resolve_collisions(entities: &mut [Entity], collisions: Vec<(usize, usize
 fn sys_bounce_rect(entities: &mut [Entity]) {
     entities.iter_mut().for_each(|e| {
         let left = e.body.position.x - e.body.radius <= 0.0;
-        let right = e.body.position.x + e.body.radius >= 800.0;
-        if left && e.body.velocity.x < 0.0 || right && e.body.velocity.x > 0.0 {
+        if left {
             e.body.velocity.x *= -1.0;
+            e.body.position.x = e.body.radius;
         }
-
+        let right = e.body.position.x + e.body.radius >= GAME_WIDTH;
+        if right {
+            e.body.velocity.x *= -1.0;
+            e.body.position.x = GAME_WIDTH - e.body.radius;
+        }
         let top = e.body.position.y - e.body.radius < 0.0;
-        let bottom = e.body.position.y + e.body.radius >= 600.0;
-        if top && e.body.velocity.y < 0.0 || bottom && e.body.velocity.y > 0.0 {
+        if top {
             e.body.velocity.y *= -1.0;
+            e.body.position.y = e.body.radius;
+        }
+        let bottom = e.body.position.y + e.body.radius >= GAME_HEIGHT;
+        if bottom {
+            e.body.velocity.y *= -1.0;
+            e.body.position.y = GAME_HEIGHT - e.body.radius;
         }
     });
 }

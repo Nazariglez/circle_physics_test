@@ -141,9 +141,11 @@ fn init_entities() -> Vec<Entity> {
 }
 
 fn is_colliding(p1: Vec2, r1: f32, p2: Vec2, r2: f32) -> bool {
-    let min_dist = r1 + r2;
-    let diff = p1 - p2;
-    diff.dot(diff).sqrt() <= min_dist
+    let distance = p1 - p2;
+    let sum_radius = r1 + r2;
+    let square_radius = sum_radius * sum_radius;
+    let square_distance = distance.dot(distance);
+    square_distance <= square_radius
 }
 
 // systems

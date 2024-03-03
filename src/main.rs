@@ -2,12 +2,12 @@ use notan::draw::*;
 use notan::math::{vec2, Vec2, Vec3};
 use notan::prelude::*;
 
-const INITIAL_ENTITIES: usize = 40;
+const INITIAL_ENTITIES: usize = 2540;
 const INITIAL_VELOCITY: f32 = 250.0;
-const ENTITY_RADIUS: f32 = 16.0;
-const GAME_WIDTH: f32 = 800.0;
-const GAME_HEIGHT: f32 = 600.0;
-const COLLISION_COLOR_TIME: f32 = 0.6;
+const ENTITY_RADIUS: f32 = 4.0;
+const GAME_WIDTH: f32 = 1280.0;
+const GAME_HEIGHT: f32 = 940.0;
+const COLLISION_COLOR_TIME: f32 = 0.1;
 const ENTITY_COLOR: Color = Color::SILVER;
 const ENTITY_COLLISION_COLOR: Color = Color::ORANGE;
 
@@ -48,9 +48,8 @@ struct State {
 
 #[notan_main]
 fn main() -> Result<(), String> {
-    let win = WindowConfig::default()
-        .set_size(GAME_WIDTH as _, GAME_HEIGHT as _)
-        .set_vsync(true);
+    let win = WindowConfig::default().set_size(GAME_WIDTH as _, GAME_HEIGHT as _);
+    // .set_vsync(true);
 
     notan::init_with(setup)
         .add_config(win)
@@ -92,6 +91,9 @@ fn update(app: &mut App, state: &mut State) {
     let collisions = sys_check_collision(&mut state.entities);
     sys_resolve_collisions(&mut state.entities, collisions);
     sys_body_to_transform(&mut state.entities);
+
+    let fps = app.timer.fps();
+    app.window().set_title(&format!("fps:{fps}"));
 }
 
 fn draw(gfx: &mut Graphics, state: &mut State) {

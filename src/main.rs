@@ -11,7 +11,9 @@ const GAME_HEIGHT: f32 = 600.0;
 struct Collision([usize; 2]);
 impl PartialEq for Collision {
     fn eq(&self, other: &Self) -> bool {
-        self.0.contains(&other.0[0]) && self.0.contains(&other.0[1])
+        let contain_id1 = self.0.contains(&other.0[0]);
+        let contain_id2 = self.0.contains(&other.0[1]);
+        contain_id1 && contain_id2
     }
 }
 

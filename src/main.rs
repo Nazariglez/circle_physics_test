@@ -3,7 +3,7 @@ use notan::math::{vec2, Vec2, Vec3};
 use notan::prelude::*;
 use static_aabb2d_index::{StaticAABB2DIndex, StaticAABB2DIndexBuilder};
 
-const INITIAL_ENTITIES: usize = 6000; //2540;
+const INITIAL_ENTITIES: usize = 2000; //2540;
 const INITIAL_VELOCITY: f32 = 10.0;
 const ENTITY_RADIUS: f32 = 5.0;
 const GAME_WIDTH: f32 = 1280.0;
@@ -11,16 +11,6 @@ const GAME_HEIGHT: f32 = 940.0;
 const COLLISION_COLOR_TIME: f32 = 0.1;
 const ENTITY_COLOR: Color = Color::SILVER;
 const ENTITY_COLLISION_COLOR: Color = Color::ORANGE;
-
-#[derive(Copy, Clone, Debug)]
-struct Collision([usize; 2]);
-impl PartialEq for Collision {
-    fn eq(&self, other: &Self) -> bool {
-        let contain_id1 = self.0.contains(&other.0[0]);
-        let contain_id2 = self.0.contains(&other.0[1]);
-        contain_id1 && contain_id2
-    }
-}
 
 struct Body {
     position: Vec2,
@@ -187,41 +177,14 @@ fn sys_clean_collisions(entities: &mut [Entity], delta: f32) {
 
 fn sys_check_collision(entities: &mut [Entity]) -> StaticAABB2DIndex<f32> {
     let mut builder = StaticAABB2DIndexBuilder::new(entities.len());
-    // TODO do not nest loops, use spatial hashing
-    // let mut colliding = vec![]; // todo maybe use a hashset?
-    entities.iter().enumerate().for_each(|(id1, e1)| {
+    entities.iter().for_each(|e1| {
         let p = e1.body.position;
         let r = e1.body.radius;
         let min = p - r;
         let max = p + r;
         builder.add(min.x, min.y, max.x, max.y);
-        /*entities.iter().enumerate().for_each(|(id2, e2)| {
-            if id1 == id2 {
-                return;
-            }
-
-            if is_colliding(
-                e1.body.position,
-                e1.body.radius,
-                e2.body.position,
-                e2.body.radius,
-            ) {
-                let collision = Collision([id1, id2]);
-                if !colliding.contains(&collision) {
-                    colliding.push(collision);
-                }
-            }
-        });*/
     });
 
-    // colliding.iter().for_each(|Collision([id1, id2])| {
-    //     entities[*id1].is_colliding = true;
-    //     entities[*id1].collision_time = COLLISION_COLOR_TIME;
-    //     entities[*id2].is_colliding = true;
-    //     entities[*id2].collision_time = COLLISION_COLOR_TIME;
-    // });
-
-    // colliding
     builder.build().unwrap()
 }
 
@@ -242,6 +205,10 @@ fn sys_resolve_collisions(entities: &mut [Entity], collisions: StaticAABB2DIndex
             let p2 = e2.body.position;
             let r2 = e2.body.radius;
 
+            if !is_colliding(p1, r1, p2, r2) {
+                return;
+            }
+
             let pos_delta = p1 - p2;
             let sum_radius = r1 + r2;
             let penetration = sum_radius - pos_delta.length();
@@ -261,21 +228,6 @@ fn sys_resolve_collisions(entities: &mut [Entity], collisions: StaticAABB2DIndex
             e2.collision_time = COLLISION_COLOR_TIME;
         });
     });
-    // collisions.into_iter().for_each(|Collision([id1, id2])| {
-    //     let b1 = &entities[id1].body;
-    //     let b2 = &entities[id2].body;
-    //
-    //     let pos_delta = b1.position - b2.position;
-    //     let sum_radius = b1.radius + b2.radius;
-    //     let penetration = sum_radius - pos_delta.length();
-    //
-    //     // Calculate the adjustment direction and magnitude
-    //     let adjustment = pos_delta.normalize() * penetration * 0.5;
-    //
-    //     // Move the circles away from each other by half the penetration depth
-    //     entities[id1].body.position += adjustment;
-    //     entities[id2].body.position -= adjustment;
-    // });
 }
 
 fn sys_bounce_rect(entities: &mut [Entity]) {

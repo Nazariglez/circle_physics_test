@@ -1,10 +1,11 @@
 use notan::draw::*;
 use notan::math::{vec2, Vec2, Vec3};
 use notan::prelude::*;
+use static_aabb2d_index::{StaticAABB2DIndex, StaticAABB2DIndexBuilder};
 
-const INITIAL_ENTITIES: usize = 2; //2540;
-const INITIAL_VELOCITY: f32 = 150.0;
-const ENTITY_RADIUS: f32 = 16.0;
+const INITIAL_ENTITIES: usize = 6000; //2540;
+const INITIAL_VELOCITY: f32 = 10.0;
+const ENTITY_RADIUS: f32 = 5.0;
 const GAME_WIDTH: f32 = 1280.0;
 const GAME_HEIGHT: f32 = 940.0;
 const COLLISION_COLOR_TIME: f32 = 0.1;
@@ -49,9 +50,8 @@ struct State {
 
 #[notan_main]
 fn main() -> Result<(), String> {
-    let win = WindowConfig::default()
-        .set_size(GAME_WIDTH as _, GAME_HEIGHT as _)
-        .set_vsync(true);
+    let win = WindowConfig::default().set_size(GAME_WIDTH as _, GAME_HEIGHT as _);
+    // .set_vsync(true);
 
     notan::init_with(setup)
         .add_config(win)
@@ -185,11 +185,17 @@ fn sys_clean_collisions(entities: &mut [Entity], delta: f32) {
     });
 }
 
-fn sys_check_collision(entities: &mut [Entity]) -> Vec<Collision> {
+fn sys_check_collision(entities: &mut [Entity]) -> StaticAABB2DIndex<f32> {
+    let mut builder = StaticAABB2DIndexBuilder::new(entities.len());
     // TODO do not nest loops, use spatial hashing
-    let mut colliding = vec![]; // todo maybe use a hashset?
+    // let mut colliding = vec![]; // todo maybe use a hashset?
     entities.iter().enumerate().for_each(|(id1, e1)| {
-        entities.iter().enumerate().for_each(|(id2, e2)| {
+        let p = e1.body.position;
+        let r = e1.body.radius;
+        let min = p - r;
+        let max = p + r;
+        builder.add(min.x, min.y, max.x, max.y);
+        /*entities.iter().enumerate().for_each(|(id2, e2)| {
             if id1 == id2 {
                 return;
             }
@@ -205,44 +211,71 @@ fn sys_check_collision(entities: &mut [Entity]) -> Vec<Collision> {
                     colliding.push(collision);
                 }
             }
-        });
+        });*/
     });
 
-    colliding.iter().for_each(|Collision([id1, id2])| {
-        entities[*id1].is_colliding = true;
-        entities[*id1].collision_time = COLLISION_COLOR_TIME;
-        entities[*id2].is_colliding = true;
-        entities[*id2].collision_time = COLLISION_COLOR_TIME;
-    });
+    // colliding.iter().for_each(|Collision([id1, id2])| {
+    //     entities[*id1].is_colliding = true;
+    //     entities[*id1].collision_time = COLLISION_COLOR_TIME;
+    //     entities[*id2].is_colliding = true;
+    //     entities[*id2].collision_time = COLLISION_COLOR_TIME;
+    // });
 
-    colliding
+    // colliding
+    builder.build().unwrap()
 }
 
-fn sys_resolve_collisions(entities: &mut [Entity], collisions: Vec<Collision>) {
-    collisions.into_iter().for_each(|Collision([id1, id2])| {
-        let b1 = &entities[id1].body;
-        let b2 = &entities[id2].body;
+fn sys_resolve_collisions(entities: &mut [Entity], collisions: StaticAABB2DIndex<f32>) {
+    (0..entities.len()).for_each(|i1| {
+        let e1 = &entities[i1];
+        let p1 = e1.body.position;
+        let r1 = e1.body.radius;
+        let min = p1 - r1;
+        let max = p1 + r1;
+        let cols = collisions.query(min.x, min.y, max.x, max.y);
+        cols.into_iter().for_each(|i2| {
+            if i1 == i2 {
+                return;
+            }
 
-        let sum_radius = b1.radius + b2.radius;
-        let pos_delta = b1.position - b2.position;
-        let magnitude = pos_delta.length();
-        let min_translation_distance = pos_delta * (sum_radius - magnitude) / magnitude;
+            let e2 = &entities[i2];
+            let p2 = e2.body.position;
+            let r2 = e2.body.radius;
 
-        let vel_delta = b1.velocity - b2.velocity;
-        let normalized_mtd = min_translation_distance.normalize();
-        let relative_vel = vel_delta.dot(normalized_mtd);
+            let pos_delta = p1 - p2;
+            let sum_radius = r1 + r2;
+            let penetration = sum_radius - pos_delta.length();
 
-        if relative_vel > 0.0 {
-            return;
-        }
+            // Calculate the adjustment direction and magnitude
+            let adjustment = pos_delta.normalize() * penetration * 0.5;
 
-        let normalized_rel_vel = normalized_mtd * relative_vel;
+            // Move the circles away from each other by half the penetration depth
+            let e1 = &mut entities[i1];
+            e1.body.position += adjustment;
+            e1.is_colliding = true;
+            e1.collision_time = COLLISION_COLOR_TIME;
 
-        // entities[id1].body.velocity -= normalized_rel_vel;
-        entities[id1].body.position += min_translation_distance;
-        // entities[id2].body.velocity += normalized_rel_vel;
-        entities[id2].body.position -= min_translation_distance;
+            let e2 = &mut entities[i2];
+            e2.body.position -= adjustment;
+            e2.is_colliding = true;
+            e2.collision_time = COLLISION_COLOR_TIME;
+        });
     });
+    // collisions.into_iter().for_each(|Collision([id1, id2])| {
+    //     let b1 = &entities[id1].body;
+    //     let b2 = &entities[id2].body;
+    //
+    //     let pos_delta = b1.position - b2.position;
+    //     let sum_radius = b1.radius + b2.radius;
+    //     let penetration = sum_radius - pos_delta.length();
+    //
+    //     // Calculate the adjustment direction and magnitude
+    //     let adjustment = pos_delta.normalize() * penetration * 0.5;
+    //
+    //     // Move the circles away from each other by half the penetration depth
+    //     entities[id1].body.position += adjustment;
+    //     entities[id2].body.position -= adjustment;
+    // });
 }
 
 fn sys_bounce_rect(entities: &mut [Entity]) {
@@ -287,6 +320,6 @@ fn sys_body_to_transform(entites: &mut [Entity]) {
 fn sys_follow_mouse(entities: &mut [Entity], pos: Vec2) {
     entities.iter_mut().for_each(|e| {
         let normalized_direction = (pos - e.body.position).normalize();
-        e.body.force += 100.0 * normalized_direction;
+        e.body.force += 30.0 * normalized_direction;
     });
 }

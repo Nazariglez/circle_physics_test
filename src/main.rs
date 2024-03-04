@@ -2,9 +2,9 @@ use notan::draw::*;
 use notan::math::{vec2, Vec2, Vec3};
 use notan::prelude::*;
 
-const INITIAL_ENTITIES: usize = 2540;
-const INITIAL_VELOCITY: f32 = 250.0;
-const ENTITY_RADIUS: f32 = 4.0;
+const INITIAL_ENTITIES: usize = 2; //2540;
+const INITIAL_VELOCITY: f32 = 150.0;
+const ENTITY_RADIUS: f32 = 16.0;
 const GAME_WIDTH: f32 = 1280.0;
 const GAME_HEIGHT: f32 = 940.0;
 const COLLISION_COLOR_TIME: f32 = 0.1;
@@ -24,6 +24,7 @@ impl PartialEq for Collision {
 struct Body {
     position: Vec2,
     velocity: Vec2,
+    force: Vec2,
     radius: f32,
 }
 
@@ -48,8 +49,9 @@ struct State {
 
 #[notan_main]
 fn main() -> Result<(), String> {
-    let win = WindowConfig::default().set_size(GAME_WIDTH as _, GAME_HEIGHT as _);
-    // .set_vsync(true);
+    let win = WindowConfig::default()
+        .set_size(GAME_WIDTH as _, GAME_HEIGHT as _)
+        .set_vsync(true);
 
     notan::init_with(setup)
         .add_config(win)
@@ -86,7 +88,10 @@ fn update(app: &mut App, state: &mut State) {
     let delta = app.timer.delta_f32();
 
     sys_clean_collisions(&mut state.entities, delta);
-    sys_apply_velocity_to_body(&mut state.entities, delta);
+
+    sys_follow_mouse(&mut state.entities, vec2(app.mouse.x, app.mouse.y));
+
+    sys_apply_movement_to_body(&mut state.entities, delta);
     sys_bounce_rect(&mut state.entities);
     let collisions = sys_check_collision(&mut state.entities);
     sys_resolve_collisions(&mut state.entities, collisions);
@@ -142,6 +147,7 @@ fn init_entities() -> Vec<Entity> {
                     position,
                     velocity,
                     radius: ENTITY_RADIUS,
+                    force: Vec2::splat(0.0),
                 },
                 transform: Transform {
                     position,
@@ -232,9 +238,9 @@ fn sys_resolve_collisions(entities: &mut [Entity], collisions: Vec<Collision>) {
 
         let normalized_rel_vel = normalized_mtd * relative_vel;
 
-        entities[id1].body.velocity -= normalized_rel_vel;
+        // entities[id1].body.velocity -= normalized_rel_vel;
         entities[id1].body.position += min_translation_distance;
-        entities[id2].body.velocity += normalized_rel_vel;
+        // entities[id2].body.velocity += normalized_rel_vel;
         entities[id2].body.position -= min_translation_distance;
     });
 }
@@ -264,14 +270,23 @@ fn sys_bounce_rect(entities: &mut [Entity]) {
     });
 }
 
-fn sys_apply_velocity_to_body(entities: &mut [Entity], delta: f32) {
+fn sys_apply_movement_to_body(entities: &mut [Entity], delta: f32) {
     entities.iter_mut().for_each(|e| {
-        e.body.position += e.body.velocity * delta;
+        let vel = e.body.velocity + e.body.force;
+        e.body.position += vel * delta;
+        e.body.force = Vec2::ZERO;
     });
 }
 
 fn sys_body_to_transform(entites: &mut [Entity]) {
     entites.iter_mut().for_each(|e| {
         e.transform.position = e.body.position;
+    });
+}
+
+fn sys_follow_mouse(entities: &mut [Entity], pos: Vec2) {
+    entities.iter_mut().for_each(|e| {
+        let normalized_direction = (pos - e.body.position).normalize();
+        e.body.force += 100.0 * normalized_direction;
     });
 }

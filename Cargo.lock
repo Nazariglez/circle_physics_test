@@ -1083,6 +1083,7 @@ name = "my_physics"
 version = "0.1.0"
 dependencies = [
  "notan",
+ "rayon",
  "static_aabb2d_index",
 ]
 

@@ -1,11 +1,12 @@
 use notan::draw::*;
 use notan::math::{vec2, Vec2, Vec3};
 use notan::prelude::*;
+use rayon::prelude::*;
 use static_aabb2d_index::{StaticAABB2DIndex, StaticAABB2DIndexBuilder};
 
-const INITIAL_ENTITIES: usize = 2000; //2540;
-const INITIAL_VELOCITY: f32 = 10.0;
-const ENTITY_RADIUS: f32 = 5.0;
+const INITIAL_ENTITIES: usize = 30000; //2540;
+const INITIAL_VELOCITY: f32 = 30.0;
+const ENTITY_RADIUS: f32 = 2.0;
 const GAME_WIDTH: f32 = 1280.0;
 const GAME_HEIGHT: f32 = 940.0;
 const COLLISION_COLOR_TIME: f32 = 0.1;
@@ -175,7 +176,7 @@ fn sys_clean_collisions(entities: &mut [Entity], delta: f32) {
     });
 }
 
-fn sys_check_collision(entities: &mut [Entity]) -> StaticAABB2DIndex<f32> {
+fn sys_check_collision(entities: &mut [Entity]) -> Vec<(usize, Vec<usize>)> {
     let mut builder = StaticAABB2DIndexBuilder::new(entities.len());
     entities.iter().for_each(|e1| {
         let p = e1.body.position;
@@ -185,44 +186,64 @@ fn sys_check_collision(entities: &mut [Entity]) -> StaticAABB2DIndex<f32> {
         builder.add(min.x, min.y, max.x, max.y);
     });
 
-    builder.build().unwrap()
+    let collisions = builder.build().unwrap();
+
+    entities
+        .par_iter()
+        .enumerate()
+        .map(|(id1, e)| {
+            let p1 = e.body.position;
+            let r1 = e.body.radius;
+            let min = p1 - r1;
+            let max = p1 + r1;
+            let cols = collisions.query(min.x, min.y, max.x, max.y);
+            let mut colliding_with = vec![];
+            for id2 in cols {
+                if id1 == id2 {
+                    continue;
+                }
+
+                let e2 = &entities[id2];
+                let p2 = e2.body.position;
+                let r2 = e2.body.radius;
+
+                if !is_colliding(p1, r1, p2, r2) {
+                    continue;
+                }
+
+                colliding_with.push(id2);
+            }
+
+            (id1, colliding_with)
+        })
+        .collect::<Vec<_>>()
 }
 
-fn sys_resolve_collisions(entities: &mut [Entity], collisions: StaticAABB2DIndex<f32>) {
-    (0..entities.len()).for_each(|i1| {
-        let e1 = &entities[i1];
+fn sys_resolve_collisions(entities: &mut [Entity], collisions: Vec<(usize, Vec<usize>)>) {
+    collisions.into_iter().for_each(|(id1, cols)| {
+        let e1 = &entities[id1];
         let p1 = e1.body.position;
         let r1 = e1.body.radius;
-        let min = p1 - r1;
-        let max = p1 + r1;
-        let cols = collisions.query(min.x, min.y, max.x, max.y);
-        cols.into_iter().for_each(|i2| {
-            if i1 == i2 {
-                return;
-            }
 
-            let e2 = &entities[i2];
+        cols.into_iter().for_each(|id2| {
+            let e2 = &entities[id2];
             let p2 = e2.body.position;
             let r2 = e2.body.radius;
-
-            if !is_colliding(p1, r1, p2, r2) {
-                return;
-            }
 
             let pos_delta = p1 - p2;
             let sum_radius = r1 + r2;
             let penetration = sum_radius - pos_delta.length();
 
             // Calculate the adjustment direction and magnitude
-            let adjustment = pos_delta.normalize() * penetration * 0.5;
+            let adjustment = pos_delta.normalize_or_zero() * penetration * 0.5;
 
             // Move the circles away from each other by half the penetration depth
-            let e1 = &mut entities[i1];
+            let e1 = &mut entities[id1];
             e1.body.position += adjustment;
             e1.is_colliding = true;
             e1.collision_time = COLLISION_COLOR_TIME;
 
-            let e2 = &mut entities[i2];
+            let e2 = &mut entities[id2];
             e2.body.position -= adjustment;
             e2.is_colliding = true;
             e2.collision_time = COLLISION_COLOR_TIME;
@@ -271,7 +292,7 @@ fn sys_body_to_transform(entites: &mut [Entity]) {
 
 fn sys_follow_mouse(entities: &mut [Entity], pos: Vec2) {
     entities.iter_mut().for_each(|e| {
-        let normalized_direction = (pos - e.body.position).normalize();
-        e.body.force += 30.0 * normalized_direction;
+        // let normalized_direction = (pos - e.body.position).normalize_or_zero();
+        // e.body.force += 30.0 * normalized_direction;
     });
 }

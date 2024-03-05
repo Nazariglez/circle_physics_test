@@ -2,7 +2,7 @@ use notan::draw::*;
 use notan::math::{vec2, Vec2, Vec3};
 use notan::prelude::*;
 use rayon::prelude::*;
-use static_aabb2d_index::{StaticAABB2DIndex, StaticAABB2DIndexBuilder};
+use static_aabb2d_index::{StaticAABB2DIndexBuilder};
 
 const INITIAL_ENTITIES: usize = 30000; //2540;
 const INITIAL_VELOCITY: f32 = 30.0;
@@ -290,8 +290,8 @@ fn sys_body_to_transform(entites: &mut [Entity]) {
     });
 }
 
-fn sys_follow_mouse(entities: &mut [Entity], pos: Vec2) {
-    entities.iter_mut().for_each(|e| {
+fn sys_follow_mouse(entities: &mut [Entity], _pos: Vec2) {
+    entities.iter_mut().for_each(|_e| {
         // let normalized_direction = (pos - e.body.position).normalize_or_zero();
         // e.body.force += 30.0 * normalized_direction;
     });

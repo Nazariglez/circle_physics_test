@@ -4,7 +4,7 @@ use notan::prelude::*;
 use rayon::prelude::*;
 use static_aabb2d_index::{StaticAABB2DIndexBuilder};
 
-const INITIAL_ENTITIES: usize = 30000; //2540;
+const INITIAL_ENTITIES: usize = 1000; //2540;
 const INITIAL_VELOCITY: f32 = 30.0;
 const ENTITY_RADIUS: f32 = 2.0;
 const GAME_WIDTH: f32 = 1280.0;
@@ -30,6 +30,7 @@ struct Entity {
     transform: Transform,
     is_colliding: bool,
     collision_time: f32,
+    follow_mouse: bool,
 }
 
 #[derive(AppState)]
@@ -73,6 +74,20 @@ fn update(app: &mut App, state: &mut State) {
 
     if state.pause {
         return;
+    }
+
+    if app.mouse.was_pressed(MouseButton::Left) {
+        let position = vec2(GAME_WIDTH * 0.5, GAME_HEIGHT * 0.5);
+        let radius = 32.0;
+        let size = Vec2::splat(radius * 2.0);
+        state.entities.push(Entity { body: Body {
+            position,
+            velocity: Default::default(),
+            force: Default::default(),
+            radius,
+        }, transform: Transform { position, size }, is_colliding: false, collision_time: 0.0,
+            follow_mouse: true,
+        })
     }
 
     // -- logic
@@ -146,6 +161,7 @@ fn init_entities() -> Vec<Entity> {
                 },
                 is_colliding: false,
                 collision_time: 0.0,
+                follow_mouse: false
             }
         })
         .collect()
@@ -290,9 +306,12 @@ fn sys_body_to_transform(entites: &mut [Entity]) {
     });
 }
 
-fn sys_follow_mouse(entities: &mut [Entity], _pos: Vec2) {
-    entities.iter_mut().for_each(|_e| {
-        // let normalized_direction = (pos - e.body.position).normalize_or_zero();
-        // e.body.force += 30.0 * normalized_direction;
+fn sys_follow_mouse(entities: &mut [Entity], pos: Vec2) {
+    entities.iter_mut().for_each(|e| {
+        if !e.follow_mouse {
+            return;
+        }
+        let normalized_direction = (pos - e.body.position).normalize_or_zero();
+        e.body.force += 30.0 * normalized_direction;
     });
 }

@@ -2,11 +2,11 @@ use notan::draw::*;
 use notan::math::{vec2, Vec2, Vec3};
 use notan::prelude::*;
 use rayon::prelude::*;
-use static_aabb2d_index::{StaticAABB2DIndexBuilder};
+use static_aabb2d_index::StaticAABB2DIndexBuilder;
 
-const INITIAL_ENTITIES: usize = 1000; //2540;
-const INITIAL_VELOCITY: f32 = 30.0;
-const ENTITY_RADIUS: f32 = 2.0;
+const INITIAL_ENTITIES: usize = 20000; //2540;
+const INITIAL_VELOCITY: f32 = 40.0;
+const ENTITY_RADIUS: f32 = 3.0;
 const GAME_WIDTH: f32 = 1280.0;
 const GAME_HEIGHT: f32 = 940.0;
 const COLLISION_COLOR_TIME: f32 = 0.1;
@@ -37,6 +37,7 @@ struct Entity {
 struct State {
     entities: Vec<Entity>,
     texture: Texture,
+    font: Font,
     pause: bool,
 }
 
@@ -60,10 +61,14 @@ fn setup(gfx: &mut Graphics) -> State {
         .from_image(include_bytes!("../assets/white_circle.png"))
         .build()
         .unwrap();
+    let font = gfx
+        .create_font(include_bytes!("../assets/Ubuntu-B.ttf"))
+        .unwrap();
     State {
         entities,
-        pause: false,
         texture,
+        font,
+        pause: false,
     }
 }
 
@@ -76,25 +81,12 @@ fn update(app: &mut App, state: &mut State) {
         return;
     }
 
-    if app.mouse.was_pressed(MouseButton::Left) {
-        let position = vec2(GAME_WIDTH * 0.5, GAME_HEIGHT * 0.5);
-        let radius = 32.0;
-        let size = Vec2::splat(radius * 2.0);
-        state.entities.push(Entity { body: Body {
-            position,
-            velocity: Default::default(),
-            force: Default::default(),
-            radius,
-        }, transform: Transform { position, size }, is_colliding: false, collision_time: 0.0,
-            follow_mouse: true,
-        })
-    }
-
     // -- logic
     let delta = app.timer.delta_f32();
 
     sys_clean_collisions(&mut state.entities, delta);
 
+    spawn_big_circle(app, state);
     sys_follow_mouse(&mut state.entities, vec2(app.mouse.x, app.mouse.y));
 
     sys_apply_movement_to_body(&mut state.entities, delta);
@@ -102,12 +94,9 @@ fn update(app: &mut App, state: &mut State) {
     let collisions = sys_check_collision(&mut state.entities);
     sys_resolve_collisions(&mut state.entities, collisions);
     sys_body_to_transform(&mut state.entities);
-
-    let fps = app.timer.fps();
-    app.window().set_title(&format!("fps:{fps}"));
 }
 
-fn draw(gfx: &mut Graphics, state: &mut State) {
+fn draw(app: &mut App, gfx: &mut Graphics, state: &mut State) {
     let mut draw = gfx.create_draw();
     draw.clear(Color::BLACK);
 
@@ -129,7 +118,41 @@ fn draw(gfx: &mut Graphics, state: &mut State) {
             .color(color);
     });
 
+    draw.text(
+        &state.font,
+        &format!(
+            "FPS: {:.2} - MS: {:.3}\nEntities: {}",
+            app.timer.fps(),
+            app.timer.delta_f32(),
+            state.entities.len()
+        ),
+    )
+    .size(30.0)
+    .position(10.0, 10.0)
+    .v_align_top()
+    .h_align_left();
+
     gfx.render(&draw);
+}
+
+fn spawn_big_circle(app: &mut App, state: &mut State) {
+    if app.mouse.was_pressed(MouseButton::Left) {
+        let position = vec2(GAME_WIDTH * 0.5, GAME_HEIGHT * 0.5);
+        let radius = 32.0 + app.timer.elapsed_f32() / 10.0;
+        let size = Vec2::splat(radius * 2.0);
+        state.entities.push(Entity {
+            body: Body {
+                position,
+                velocity: Default::default(),
+                force: Default::default(),
+                radius,
+            },
+            transform: Transform { position, size },
+            is_colliding: false,
+            collision_time: 0.0,
+            follow_mouse: true,
+        })
+    }
 }
 
 fn init_entities() -> Vec<Entity> {
@@ -161,7 +184,7 @@ fn init_entities() -> Vec<Entity> {
                 },
                 is_colliding: false,
                 collision_time: 0.0,
-                follow_mouse: false
+                follow_mouse: false,
             }
         })
         .collect()
@@ -248,21 +271,29 @@ fn sys_resolve_collisions(entities: &mut [Entity], collisions: Vec<(usize, Vec<u
 
             let pos_delta = p1 - p2;
             let sum_radius = r1 + r2;
-            let penetration = sum_radius - pos_delta.length();
+            let distance = pos_delta.length();
+            let penetration = sum_radius - distance;
 
-            // Calculate the adjustment direction and magnitude
-            let adjustment = pos_delta.normalize_or_zero() * penetration * 0.5;
+            let direction = (p2 - p1).normalize_or_zero();
 
             // Move the circles away from each other by half the penetration depth
             let e1 = &mut entities[id1];
-            e1.body.position += adjustment;
             e1.is_colliding = true;
             e1.collision_time = COLLISION_COLOR_TIME;
 
+            if r1 < r2 {
+                let push_force = penetration * (r2 / (r1 + r2));
+                e1.body.position -= direction * push_force;
+            }
+
             let e2 = &mut entities[id2];
-            e2.body.position -= adjustment;
             e2.is_colliding = true;
             e2.collision_time = COLLISION_COLOR_TIME;
+
+            if r1 >= r2 {
+                let push_force = penetration * (r1 / (r1 + r2));
+                e2.body.position += direction * push_force;
+            }
         });
     });
 }
@@ -312,6 +343,6 @@ fn sys_follow_mouse(entities: &mut [Entity], pos: Vec2) {
             return;
         }
         let normalized_direction = (pos - e.body.position).normalize_or_zero();
-        e.body.force += 30.0 * normalized_direction;
+        e.body.force += 90.0 * normalized_direction;
     });
 }

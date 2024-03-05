@@ -4,9 +4,9 @@ use notan::prelude::*;
 use rayon::prelude::*;
 use static_aabb2d_index::StaticAABB2DIndexBuilder;
 
-const INITIAL_ENTITIES: usize = 30000; //2540;
+const INITIAL_ENTITIES: usize = 3000; //2540;
 const INITIAL_VELOCITY: f32 = 40.0;
-const ENTITY_RADIUS: f32 = 2.0;
+const ENTITY_RADIUS: f32 = 8.0;
 const GAME_WIDTH: f32 = 1280.0;
 const GAME_HEIGHT: f32 = 940.0;
 const COLLISION_COLOR_TIME: f32 = 0.1;
